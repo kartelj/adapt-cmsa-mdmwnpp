@@ -20,18 +20,12 @@
 #include <fstream>
 #include <float.h>
 #else
-//#include <ilcp/cp.h>
-// the following "include" is necessary for the correct working/compilation of CPLEX. You should adapt this path to your installation of CPLEX
-// #include "/home/djukanovic/Desktop/projects/LCAPS_software/cplex-12.5/cplex/include/ilcplex/ilocplex.h" 
-//"/home/djukanovic/Desktop/projects/LCAPS_software/cplex-12.5/include/ilcplex/ilocplex.h"
-#include "/home/marko/Desktop/CPLEX_Studio127/cplex/include/ilcplex/ilocplex.h"
-// "/home1/share/ILOG/cplex-12.7.0/cplex/include/ilcplex/ilocplex.h"
+#include "/home/marko/Desktop/CPLEX_Studio127/cplex/include/ilcplex/ilocplex.h" // path to ilocplex to include 
 #endif
 
 #define wmat(i,j) problem->w[(i)*problem->m + j]
-
 #define INF 1000000000000000.0 
-#define MAXS 300
+#define MAXS 10
 
 
 
@@ -43,7 +37,7 @@ typedef IloArray<IloNumVarArray> NumVarMatrix;
 typedef struct {
 	int n, m, k, d, alg;		/* broj elemenata i dimenzija */
 	double* w, * sum;         	/* matrix weights i array of sums of weights */
-	double* y;             		/* solutino */
+	double* y;             	/* solutino */
 	double fv;              	/* value of obj function */
 } problem_struct;
 
@@ -52,7 +46,6 @@ typedef struct {
 int usl, prom, n;
 int nprom, nusl, zero, nprommax, nuslmax;
 FILE* ul, * izl, * mst;
-//CPXFILEptr log ;
 char* tip, ** imepr;
 int* ind;
 //std::string imeul; 
@@ -72,7 +65,7 @@ int cmsa_greedy = 2; //KMEANS by default
 
 vector<int> s_bsf; // store  best solution
 double obj_best = INF; //best obj in CMSA
-int indeks = 0; // for multiple runs of an instance 
+int index = 0; // denoting an index of run of instance 
 int seed = 1;
 /** end of CMSA parameters **/
 
@@ -87,16 +80,13 @@ double prefer_s_bsf = 1;
 
 /** end Adapt-CMSA parameters definition **/
 
-// VNS CMSA parameter
-double move_prob = 0.5;
-int min_p = 2;
-int max_p = 50;
 
 Timer timer;
 problem_struct* problem;
 
 
 /** Enum types for algorithms **/
+
 enum MILPS {
 
 	COAM = 0,
@@ -119,7 +109,7 @@ enum GREEDY
 };
 /** end of Enum types **/
 
-string outPath = "/home/marko/Desktop/Papers/MTWNPP/MTWNPP/CMSA/code/";
+string outPath = "/home/marko/Desktop/Papers/MTWNPP/MTWNPP/CMSA/code/"; // out path where out files will be created after runs (shpuld be modified before use)
 
 ILOSOLVECALLBACK2(abortCallback, IloCplex::Aborter&, abo, double&, curbest) {
 
@@ -144,7 +134,7 @@ void ulazpod(void)
 	ul = fopen(imeul, "rt");
 	if (ul == NULL)
 	{
-		printf("Ulazna datoteka nije otvorena!\n");
+		printf("File is not opened!\n");
 		exit(0);
 	}
 
@@ -171,7 +161,7 @@ void ulazpod(void)
 
 	if (problem->w == NULL || problem->y == NULL || problem->sum == NULL)
 	{
-		printf("Dinamicke promenljive nisu dobro alocirane!\n");
+		printf("DDynamic structures are not located!\n");
 		exit(0);
 	}
 
@@ -189,15 +179,9 @@ void ulazpod(void)
 		for (i = 0; i < problem->n; i++)
 			problem->sum[j] += wmat(i, j);
 	}
-	/*for (i = 0; i < problem->n; i++)
-	{
-		for (j = 0; j < problem->m; j++)
-			cout << wmat(i, j) << "\t ";
-		cout << endl;
-	}*/
 	fclose(ul);
 }
-/* ulazpod */
+/* end of reading and stroring in data structures */
 
 
 
@@ -206,7 +190,6 @@ void ulazpod(void)
 
 double max_minus_min(vector<vector<double>>& sum, int l)
 {
-	//cout << "max min " << endl;
 	double max_v = -10000000.0; double min_v = 1000000000.0;
 
 	for (int j = 0; j < problem->k; ++j)
@@ -215,8 +198,6 @@ double max_minus_min(vector<vector<double>>& sum, int l)
 		if (max_v < sum[j][l])
 			max_v = sum[j][l];
 	}
-	//cout << "max_v : " << max_v << endl;
-
 	for (int j = 0; j < problem->k; ++j)
 	{
 
@@ -233,13 +214,12 @@ double objective(vector<int>& solution, int k = -1)
 
 	if (solution.empty())
 		return INF;
-
 	double value = 0.0;
 	vector<vector<double>> sum;  // sum[i][dx]: sum of coordinate dx from {0,...,m-1} of vectors in partition i 
 
 	int kval = k;
 
-	if (kval == -1) // if alg == 3 (KMeans based) ==> problem->k is replaced to k (allowed number of partitions)
+	if (kval == -1) // if alg == 3 (KMeans based); problem->k is replaced to k (allowed number of partitions)
 		kval = problem->k;
 
 	for (int i = 0; i < kval; ++i)
@@ -257,11 +237,8 @@ double objective(vector<int>& solution, int k = -1)
 
 		for (int j = 0; j < problem->m; ++j)
 			sum[px][j] += wmat(index, j);
-
 		index++; // next vector
 	}
-	// calculate min max value:
-	//cout << "min max calc" << endl;
 	double obj = -INF;
 
 	for (int j = 0; j < problem->m; ++j) // through coordinates:
@@ -290,23 +267,18 @@ bool validityCheck(vector<int>& s)
 
 }
 
-/* Kojic, m=2 CPLEX  */
+/* Kojic (2010), m=2 CPLEX model */
 void cplex_init_kojic()
 {
-	/*for(int i = 0; i < problem->m; ++i)
-		cout << "sum[ " << i << " ] " << problem->sum[ i ] << "\n" ;
-	*/
+ 
 	IloEnv env;
 	IloModel model(env);
 
 	IloNumVar z(env);
 	IloNumVarArray y(env);
-	//cout << "Vars initialized " << endl; 
 	for (int i = 0; i < problem->n; ++i)
 		y.add(IloNumVar(env, 0, 1, ILOINT));
-
-	//cout << "Constriants " << endl; 
-	/* uslov (1) */
+	/* constraint (1) */
 	for (int j = 0; j < problem->m; j++) // iterate through dimensions: 
 	{
 		IloExpr e(env);
@@ -316,7 +288,7 @@ void cplex_init_kojic()
 		e -= 0.5 * z;
 		model.add(e <= 0.5 * problem->sum[j]);
 	}
-	/** uslov (2) **/
+	/** constraint (2) **/
 	for (int j = 0; j < problem->m; j++) // iterate through dimensions: 
 	{
 		IloExpr e(env);
@@ -325,7 +297,7 @@ void cplex_init_kojic()
 		e += 0.5 * z;
 		model.add(e >= 0.5 * problem->sum[j]);
 	}
-	/**  uslov 3 iz Faria (2017) **/
+	/**  constraint 3 from Faria et al. (2017) **/
 	/*IloExpr expr(env);
 	for(int j = 0; j < problem->n; j++) // iterate through dimensions:
 	{
@@ -350,22 +322,20 @@ void cplex_init_kojic()
 #else
 	IloNum lastObjVal = std::numeric_limits<double>::max();
 #endif
-	//cplex.exportModel("lpex1.lp");
-	// tell CPLEX to make use of the function 'loggingCallback' for writing out information to the screen
+ 
 	//cplex.use(loggingCallback(env, timer,/* times, results, gaps, iter,*/ lastObjVal));
-	// rjesavanje modela:
 	cplex.solve();
 
 	if (cplex.getStatus() == IloAlgorithm::Optimal or cplex.getStatus() == IloAlgorithm::Feasible)
 	{
-		/*if(cplex.getStatus() == IloAlgorithm::Optimal)
-		   cout << "CPLEX finds optimal" << endl;
+		if(cplex.getStatus() == IloAlgorithm::Optimal)
+		   cout << "CPLEX found optimal" << endl;
 		else
-		   cout << "CPLEX finds feasible solution" << endl;*/
+		   cout << "CPLEX found feasible solution" << endl;
 
 		double lastVal = double(cplex.getObjValue());
 		// print the objective point
-		cout << "nodes/vertices in the solution: {" << endl;
+		cout << "Nodes/vertices in the solution: {" << endl;
 		bool first = true;
 		for (int i = 0; i < problem->n; ++i) {
 			IloNum xval = cplex.getValue(y[i]);
@@ -417,9 +387,7 @@ vector<int> cplex_init_faria(set<pair<int, int>>& C_prime, double UB = INF)
 		for (int k = 0; k < problem->k; ++k)
 			x[i][k] = IloNumVar(env, 0.0, 1.0, ILOINT);
 	}
-	//cout << "Vars initialized in Faria model... " << endl; 
-	// cout << "Now constriants... " << endl; 
-
+ 
 	 // if CMSA has been executed ==> form a subinstance to solve 
 	if (!C_prime.empty())
 	{
@@ -532,24 +500,23 @@ vector<int> cplex_init_faria(set<pair<int, int>>& C_prime, double UB = INF)
 	/** check if a model returs useful solutions **/
 	if (cplex.getStatus() == IloAlgorithm::Optimal or cplex.getStatus() == IloAlgorithm::Feasible)
 	{
-		/*if(cplex.getStatus() == IloAlgorithm::Optimal)
-		   cout << "CPLEX finds optimal" << endl;
+		if(cplex.getStatus() == IloAlgorithm::Optimal)
+		   cout << "CPLEX found optimal" << endl;
 		else
-		   cout << "CPLEX finds feasible solution" << endl;*/
+		   cout << "CPLEX found feasible solution" << endl;
 
 		double lastVal = double(cplex.getObjValue());
 		// print the objective point
 
-		cout << "nodes/vertices in the solution: {" << endl;
+		cout << "Nodes/vertices in the solution: {" << endl;
 		bool first = true;
 		for (int i = 0; i < problem->n; ++i) {
 			for (int j = 0; j < problem->k; ++j) {
 
 				IloNum xval = cplex.getValue(x[i][j]);
-				if (xval > 0.9) {
-					//cout << "Vector " << i << " included into partitioning "  << j << endl; 
-					solution.push_back(j);
-				}
+				if (xval > 0.9) 
+				    solution.push_back(j);
+				
 			}
 		}
 		cout << "}" << endl;
@@ -607,7 +574,7 @@ vector<int>  cplex_COAM(set<pair<int, int>>& C_prime, double UB = INF)
 
 	IloCplex cplex(model);
 
-	if (problem->alg == CMSAH) //or problem->alg == 5)
+	if (problem->alg == CMSAH)  
 	{
 		cplex.use(abo);  // here you tell the IloCplex object to use this aborter
 		cplex.use(abortCallback(env, abo, obj_best));  // here you tell the IloCplex object to use "your" aborter function from above.  
@@ -746,10 +713,10 @@ vector<int>  cplex_COAM(set<pair<int, int>>& C_prime, double UB = INF)
 	/** check if a model returs useful solutions **/
 	if (cplex.getStatus() == IloAlgorithm::Optimal or cplex.getStatus() == IloAlgorithm::Feasible)
 	{
-		/*if(cplex.getStatus() == IloAlgorithm::Optimal)
-		   cout << "CPLEX finds optimal" << endl;
+		if(cplex.getStatus() == IloAlgorithm::Optimal)
+		   cout << "CPLEX found the optimum" << endl;
 		else
-		   cout << "CPLEX finds feasible solution" << endl;*/
+		   cout << "CPLEX found feasible solution" << endl;*/
 
 		double lastVal = double(cplex.getObjValue());
 		// print the objective point
@@ -766,13 +733,13 @@ vector<int>  cplex_COAM(set<pair<int, int>>& C_prime, double UB = INF)
 				}
 			}
 		}
-		//cout << "}" << endl;
-		//cout << "value: " << lastVal << endl;
-		//cout << "gap: " << double(cplex.getMIPRelativeGap()) << endl;
+		cout << "}" << endl;
+		cout << "value: " << lastVal << endl;
+		cout << "gap: " << double(cplex.getMIPRelativeGap()) << endl;
 		double end_time = timer.elapsed_time(Timer::VIRTUAL);
-		//cout << "time: " << (end_time - cur_time ) <<"\n";
+		cout << "time: " << (end_time - cur_time ) <<"\n";
 		//assert(lastVal == objective(solution) );
-		//cout << "Validation of the solution: " << objective(solution) << endl; 
+		cout << "Validation of the solution: " << objective(solution) << endl; 
 
 		if (problem->alg == COAM) // only if the pure MILP is run, write the solution in an out file
 		{
@@ -825,7 +792,7 @@ void rearrange(vector<int>& solution)
 
 vector<int>  MDRGH(int d)
 {
-	cout << "MDRGH executed..." << endl;
+	cout << "Run MDRGH ..." << endl;
 
 	vector<vector<double>> L;
 	vector<int> solution(problem->n, -1);
@@ -865,15 +832,11 @@ vector<int>  MDRGH(int d)
 		int j_star = argmin(L, D);
 		solution[shuffle_arr[i]] = j_star;
 		// update L-values
-
 		for (int dx = 0; dx < d; ++dx) // problem
 			L[j_star][dx] = L[j_star][dx] + wmat(shuffle_arr[i], D[dx]); // i ==>  shuffle [ i ] (shuffled) 
-
 	}
 
 	double obj = objective(solution);
-
-	//cout << "Rearranged solution: " << endl;
 	rearrange(solution);
 
 	if (problem->alg == MDRGHG)
@@ -891,13 +854,12 @@ vector<int>  MDRGH(int d)
 		myfileOut << "time: " << (end_time - cur_time) << "\n";
 		myfileOut.close();
 	}
-	//cout << "obj: " << objective(solution) << endl;
 	return solution;
 }
 
 vector<int> RandomizedGenerator()
 {
-	//cout << "Randomized procedure... " << endl;
+	cout << "Run Randomized procedure... " << endl;
 	// start with n-partitioning --> each vector in its own partition
 	vector<int> solution(problem->n, -1);
 
@@ -922,7 +884,7 @@ vector<int> RandomizedGenerator()
 			solution[i] = part_r;
 		}
 	}
-	//double obj = LSbest(solution);
+ 
 	rearrange(solution);
 	return solution;
 
@@ -930,7 +892,7 @@ vector<int> RandomizedGenerator()
 
 vector<int> KMeansHeuristic(int num_move = 1)
 {
-	cout << "KMeans based heuristic " << endl;
+	cout << "Run  KMeans based heuristic ... " << endl;
 	// start with n-partitioning --> each vector in its own partition
 	vector<int> solution;
 
@@ -1023,7 +985,7 @@ vector<int> KMeansHeuristic(int num_move = 1)
 		ofstream myfileOut(outPath + std::to_string(problem->n) + "_" + std::to_string(problem->m) +
 			"_" + std::to_string(problem->k) + "_" + std::to_string(problem->d) + "_" + std::to_string(problem->alg) + ".out");
 		// write  into a file
-		//std::cout << std::setprecision(12) << std::fixed;
+ 
 		myfileOut << "obj: " << obj << endl;
 		myfileOut << "value: " << std::fixed << obj << endl;
 		myfileOut << "time: " << (end_time - cur_time) << "\n";
@@ -1041,24 +1003,17 @@ struct hash_pair {
 		auto hash1 = hash<T1>{}(p.first);
 		auto hash2 = hash<T2>{}(p.second);
 
-		//if (hash1 != hash2) {
 		return hash1 ^ hash2;
-		// }
-
-		 // If hash1 == hash2, their XOR is zero.
-		 //  return hash1;
 	}
 };
 
 vector<int> ApplyExactSolver(set<pair<int, int>>& C_prime, double UB = INF)
 {
-	//cout << "Applying solver..." << endl;
 	vector<int> S_sub;
 	if (cmsa_milp == 0)
 		S_sub = cplex_COAM(C_prime, UB);
 	else
 		S_sub = cplex_init_faria(C_prime, UB);
-	//cout << "Solving finished." << endl;
 	return S_sub;
 }
 
@@ -1086,7 +1041,6 @@ void Adapt(unordered_map<pair<int, int>, int, hash_pair>& Age, set<pair<int, int
 			C_prime.erase(c);// cout << "REMOVE COMPONENTS " << c.first << " " << c.second << endl;
 			Age.erase(c);
 		}
-
 	}
 }
 
@@ -1353,7 +1307,6 @@ double LSbest(vector<int>& sol)
 		else
 			maps_count[x]++;
 	}
-	// cout << "maps=> 0 " << maps_count[0] << endl;
 	int impr = 1;
 	while (impr) {
 		impr = 0;
@@ -1367,7 +1320,7 @@ double LSbest(vector<int>& sol)
 			if (maps_count[sol[i]] == 1)
 				continue;
 			for (int p = 0; p < k; p++) {
-				if (p == sol[i])   //count(sol.begin(), sol.end(), sol[i] ) == 1 ) // restrictions to make 1-move
+				if (p == sol[i])   
 					continue;
 
 				double new_fit = move_fit(sol, i, p, p_sum);
@@ -1505,113 +1458,8 @@ double LSbest(vector<int>& sol)
 
 /** End of LS from GA **/
 
-// 1-move --- pick an element i and move it to (random) paritioning j 
-// restriction: s_j > s_i  ==> and change s_j = s_i
-vector<int> LS1(vector<int>& solution)
-{
-
-	cout << "Local search... " << endl;
-	int iter_no_impr = 0;
-	vector<int> best = solution; double best_obj = objective(solution);
-
-
-	while (true)
-	{
-
-		vector<int> s_prime = best;
-
-		int i = rand() % solution.size();
-		int j = rand() % solution.size();
-		while (s_prime[j] < s_prime[i])
-		{
-			i = rand() % solution.size();
-			j = rand() % solution.size();
-		}
-
-
-
-		s_prime[j] = s_prime[i];
-		double s_prime_obj = objective(s_prime);
-
-		if (s_prime_obj < best_obj) //First improvement strategy
-		{
-			cout << "improved: " << s_prime_obj << endl;
-			best_obj = s_prime_obj;
-			best = s_prime;
-			iter_no_impr = 0;
-		}
-		else
-			iter_no_impr++;
-
-		if (iter_no_impr > 10000) { // should be parametrized
-			cout << "No improvement " << endl;
-			break;
-		}
-	}
-
-	return best;
-
-
-}
-
-// k--swap based LS 
-vector<int> LS2(vector<int>& solution)
-{
-
-	cout << "Local search. LS2 .. " << endl;
-	int iter_no_impr = 0;
-	vector<int> best = solution; double best_obj = objective(solution);
-
-
-	bool improved = true;
-
-	while (improved)
-	{
-
-		improved = false;
-		vector<int> s_prime_curr = best;
-		for (int i = 0; i < problem->n; ++i)
-		{
-			for (int j = 0; j < problem->n; ++j)
-			{
-
-				vector<int> s_prime = s_prime_curr;
-				int k = 0;
-				int kx = 1;  // kx-swap -- maximal neighbourhood
-				while (k < kx)
-				{	// swap s_i and s_j
-					if (i != j)
-					{
-						int temp = s_prime[j];
-						s_prime[j] = s_prime[i];
-						s_prime[i] = temp;
-					}
-					++k;
-
-				}
-
-				double s_prime_obj = objective(s_prime);
-				cout << "s_prime_obj: " << s_prime_obj << endl;
-				if (s_prime_obj < best_obj) //Best improvement strategy
-				{
-					cout << "solution improved... " << endl;
-					best_obj = s_prime_obj;
-					best = s_prime;
-					iter_no_impr = 0;
-					improved = true;
-				}
-				else
-					iter_no_impr++;
-			}
-		}
-	}
-
-
-	return best;
-
-
-}
-
+  
+/** Basic CMSA **/
 void CMSA()
 {
 
@@ -1665,7 +1513,7 @@ void CMSA()
 		Adapt(Age, C_prime, S_opt_prime);
 		cmsa_iter++;
 		end_time = timer.elapsed_time(Timer::VIRTUAL); // update the execution time
-		cout << "OBJ BEST: " << obj_best << endl;
+		cout << "obj: " << obj_best << endl;
 	}
 
 	// report stats: 
@@ -1680,15 +1528,15 @@ void CMSA()
 		+ "_" + std::to_string(problem->alg)
 		+ "_" + std::to_string(int(n_a)) + "_" + std::to_string(int(age_max))
 		+ "_" + std::to_string(int(cmsa_cplex_time))
-		+ "_" + std::to_string(indeks) + ".out");
+		+ "_" + std::to_string(index) + ".out");
 	// write  into a file
 	myfileOut << "value: " << std::fixed << obj_best << endl;
 	myfileOut << "time: " << (end_time - cur_time) << endl;
 	myfileOut << "iter_best: " << cmsa_iter_best << endl;
 	myfileOut.close();
 
-
 }
+/** End of basic CMSA **/ 
 
 /** Adapt-CMSA implementation **/
 
@@ -1704,16 +1552,8 @@ vector<int> ProbabilisticSolutionConstruction(vector<int>& s_bs, double alpha_bs
 		double r = ((double)rand() / (RAND_MAX)) + 1;
 		if (r - 1 < mutate) // do mutation
 		{
-
-			/*int oldp = s[i];
-			do {
-				s[i] = rand() % problem->k;
-			} while (s[i] == oldp);*/
-
-			// cout <<to_string(oldp) << " --> "<< to_string(s[i]) << endl;
-
+ 
 			int partition = rand() % problem->k; // which partition index to choose
-
 			if (no_appear(s, s[i]) <= 1)
 			{
 				continue;
@@ -1735,7 +1575,7 @@ vector<int> ProbabilisticSolutionConstructionSwapBased(vector<int>& s_bs, double
 
 	vector<int> s = s_bs;      //   srand(time(NULL));
 	double mutate = 1.0 - alpha_bsf; // probability of mutation
-	//cout << "mutate factor " << mutate << endl;
+ 
 	for (int i = 0; i < s.size() - 1; ++i)
 	{
 		for (int j = i + 1; j < s.size(); ++j)
@@ -1758,7 +1598,6 @@ vector<int> ProbabilisticSolutionConstructionSwapBased(vector<int>& s_bs, double
 
 
 /** solve subinstance partially ==> inclusivelly  **/
-// input: set of  components: C_prime 
 
 struct ComparePairs {
 
@@ -1791,9 +1630,6 @@ vector<int> formSubinstanceDeep(std::vector<vector<pair<int, int>>>& C_prime)
 	for (int i = 0; i < C_prime.size(); ++i)
 		for (auto& x : C_prime[i])
 			Account[x.first].insert(x.second);
-
-	/*for(int i = 0; i < problem->n; ++i)
-		cout << Account[i].size() << endl;*/
 
 	vector<int> sort_array;
 	for (int i = 0; i < problem->n; ++i)
@@ -1850,7 +1686,6 @@ vector<int> formSubinstanceDeep(std::vector<vector<pair<int, int>>>& C_prime)
 
 	for (int l = start; l < problem->k; ++l) // k ==> k + 1
 	{
-		cout << "l-th step =====================================> " << l << endl;
 		for (int v = 0; v < problem->n; ++v) // first start-elements in each 
 		{
 			//cout << "sort_array[ v ]" << sort_array[ v ] << endl;
@@ -1869,12 +1704,6 @@ vector<int> formSubinstanceDeep(std::vector<vector<pair<int, int>>>& C_prime)
 		{
 			// if within 0.9 best solution ==> improve by the LS
 			double  s_opt_prime_obj = objective(S_opt_prime);
-			/*if(s_opt_prime_obj >= 0.6 * objective(s_bsf))
-			{
-			   cout << "Apply LS procedure ======================================================>  " << endl;
-			   s_opt_prime_obj = LS(S_opt_prime); // possibly improve
-			}*/
-
 			if (s_opt_prime_obj < sol_in_iter)
 			{
 				best_sol_iter.clear();
@@ -1943,7 +1772,7 @@ vector<int> formSubinstance(std::vector<vector<pair<int, int>>>& C_prime)
 	// add one-by-one
 	for (int j = addFirst; j < C_prime[0].size(); ++j) // i = addFrist, ..., n (partially)
 	{
-		//cout << "added most occured j-th column " << j << endl; 
+
 		vector<int> S_opt_prime;
 
 		for (int i = 0; i < C_prime.size(); ++i)
@@ -1970,7 +1799,7 @@ vector<int> formSubinstance(std::vector<vector<pair<int, int>>>& C_prime)
 	return best_sol_iter;
 }
 
-
+/** ADAPT-CMSA + LS **/
 void Adapted_CMSA()
 {
 	double eps = 1;
@@ -1978,7 +1807,7 @@ void Adapted_CMSA()
 	unordered_map<pair<int, int>, int, hash_pair> Age;
 	set<pair<int, int>> C_prime;
 
-	int n_a_init = n_a; //n_a initialized from a command line  (n_a = 1, in the case of the original version of AdaptCMSA)
+	int n_a_init = n_a; // n_a initialized from a command line  (n_a = 1, in the case of the original version of AdaptCMSA)
 	double alpha_bsf = alpha_UB;
 
 	/** start the procedure **/
@@ -2014,26 +1843,21 @@ void Adapted_CMSA()
 	// start with the main iterations 
 	while (end_time - cur_time <= vreme)
 	{
-		/*cout << to_string(cmsa_iter) << ".\tn_a_init=" << to_string(n_a_init) << "\talpha_bsf=" << to_string(alpha_bsf)
-			<< "\tbest=" << to_string(obj_best) << "\tnew=" << to_string(S_opt_prime_obj) << endl;*/
-
+ 
 		for (int i = 0; i < n_a_init; ++i) // generate random solutions:
 		{
 
 			vector<pair<int, int>> C_i;
-
 			vector<int> S;
-			//float r = ((double) rand() / (RAND_MAX)) + 1;  
-
 			S = ProbabilisticSolutionConstruction(s_bsf, alpha_bsf);
 
 			double S_obj = LSbest(S);
-			rearrange(S);
+			rearrange(S);  
 			if (S_obj < obj_best) // update best sol
 			{
 				s_bsf.clear();
 				for (auto x : S) // update s_bsf
-					s_bsf.push_back(x);
+				     s_bsf.push_back(x);
 
 				obj_best = S_obj;
 			}
@@ -2060,7 +1884,6 @@ void Adapted_CMSA()
 		vector<int> S_opt_prime;
 		if (problem->alg == DEEP_CMSAH) //Deep-CMSA
 			S_opt_prime = formSubinstanceDeep(C_prime_vector);
-		//S_opt_prime = formSubinstance( C_prime_vector ); 
 		else
 			S_opt_prime = ApplyExactSolver(C_prime);
 
@@ -2076,10 +1899,6 @@ void Adapted_CMSA()
 			ls_iter_impr++;
 			S_opt_prime_obj = LSbest(S_opt_prime); // possibly improve
 			rearrange(S_opt_prime);
-			//double stest = LS(S_opt_prime);
-			//if (fabs(stest - S_opt_prime_obj)>0.01)
-			//    cout << "GRESKA" << endl;
-		//}
 		}
 
 		// End of LS application
@@ -2096,33 +1915,11 @@ void Adapted_CMSA()
 
 			obj_best = S_opt_prime_obj;
 			n_a_init = n_a;
-			alpha_bsf = alpha_UB; // aca dodao
+			alpha_bsf = alpha_UB;  
 			cmsa_iter_best = cmsa_iter;
 		}
 		else {
-			/*
-			if (t_solve < t_prop * cmsa_cplex_time) {
-				// there was enough time for cplex to deal with model
-				// so we adjust gradually alpha_bs to increase model search space
-				if(alpha_bsf - alpha_red >= alpha_LB)
-					alpha_bsf -= alpha_red;
-				else {
-					// or if alpha_bs is already difficult, we jump to the higher neighborhood with the easiest alpha (this is gradual change of pair (n_a_init, alpha_bsf)
-					n_a_init++;
-					alpha_bsf = alpha_UB;
-				}
-			}
-			else {
-				// opposite to previous, gradual decrease of model search space through dynamics of (n_a_init, alpha_bsf)
-				if (alpha_bsf < alpha_UB)
-					alpha_bsf = min(alpha_bsf + alpha_red / 10, alpha_UB);
-				else if (n_a_init > n_a){
-					n_a_init--;
-					alpha_bsf = alpha_LB;
-				}
-			}*/
-
-
+		
 			if (!S_opt_prime.empty() and S_opt_prime_obj > obj_best + eps) // if empty ==> the same solution 
 			{
 
@@ -2133,7 +1930,7 @@ void Adapted_CMSA()
 					alpha_bsf = alpha_UB; // aca dodao
 				}
 			}
-			else   // no improvement => local optima ==> diverse the search for more 
+			else   // no improvement => local optima ==> empower diversity of the search 
 				n_a_init++;
 
 		}
@@ -2177,13 +1974,13 @@ void Adapted_CMSA()
 	for (auto x : s_bsf)
 		cout << x << " ";
 
-	// store the solution: 
+	// store the solution in a file: 
 	ofstream myfileOut(outPath + std::to_string(problem->n) + "_" + std::to_string(problem->m)
 		+ "_" + std::to_string(problem->k) + "_" + std::to_string(problem->d)
 		+ "_" + std::to_string(problem->alg)
 		+ "_" + std::to_string(int(n_a)) + "_" + std::to_string(int(age_max))
 		+ "_" + std::to_string(int(cmsa_cplex_time))
-		+ "_" + std::to_string(indeks) + ".out");
+		+ "_" + std::to_string(index) + ".out");
 	// write  into a file
 	myfileOut << "value: " << std::fixed << obj_best << endl;
 	myfileOut << "time: " << (end_time - cur_time) << endl;
@@ -2192,6 +1989,7 @@ void Adapted_CMSA()
 	myfileOut << "LS iter improved: " << ls_iter_impr << endl;
 	myfileOut << "validity: " << valid << endl;
 	myfileOut << "solution: ";
+	  
 	for (auto x : s_bsf)
 		myfileOut << x << " ";
 
@@ -2266,18 +2064,14 @@ void read_parameters(int argc, char** argv) {
 		else if (strcmp(argv[iarg], "-alpha_red") == 0)  alpha_red = atof(argv[++iarg]);
 		else if (strcmp(argv[iarg], "-t_prop") == 0)   t_prop = atof(argv[++iarg]);
 		else if (strcmp(argv[iarg], "-seed") == 0)   seed = atoi(argv[++iarg]);
-		else if (strcmp(argv[iarg], "-index") == 0)  indeks = atoi(argv[++iarg]);
+		else if (strcmp(argv[iarg], "-index") == 0)  index = atoi(argv[++iarg]);
 		else if (strcmp(argv[iarg], "-out") == 0)   outPath = argv[++iarg];//sprintf(outPath,"%s",argv[++iarg]);
-		else if (strcmp(argv[iarg], "-move_prob") == 0) move_prob = atof(argv[++iarg]);
-		else if (strcmp(argv[iarg], "-min_p") == 0) min_p = atoi(argv[++iarg]);
-		else if (strcmp(argv[iarg], "-max_p") == 0) max_p = atoi(argv[++iarg]);
 		else if (strcmp(argv[iarg], "-ls_number") == 0) ls_number = atoi(argv[++iarg]);
 
 		else ++iarg;
 	}
-	//cout << "n=" << to_string(problem->n) << " m=" << to_string(problem->m) << " k=" << to_string(problem->k) << endl;
 
-	if (problem->m < problem->d)
+	if (problem->m < problem->d) // some automatic parameters violations fixes
 		problem->d = problem->m;
 
 	if (problem->d == 0 or problem->d == NULL) // not set 
